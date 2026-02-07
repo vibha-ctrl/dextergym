@@ -7,16 +7,16 @@ Train PPO policies on dexterous manipulation tasks.
 
 Usage:
     # Train single task
-    python train.py --task USBInsertion-v0
+    python train.py --task ButtonPress-v0
     
     # Train all tasks
     python train.py --task all
     
     # Custom timesteps
-    python train.py --task CoinStack-v0 --timesteps 1000000
+    python train.py --task ButtonPress-v0 --timesteps 1000000
     
     # Resume training
-    python train.py --task KeyTurn-v0 --checkpoint models/KeyTurn-v0/best_model.zip
+    python train.py --task ButtonPress-v0 --checkpoint models/ButtonPress-v0/best_model.zip
 """
 
 import argparse
@@ -101,7 +101,7 @@ def train_task(
         best_model_save_path=str(model_dir),
         log_path=str(log_dir),
         eval_freq=max(10000 // n_envs, 1),
-        n_eval_episodes=10,
+        n_eval_episodes=20,
         deterministic=True,
         render=False,
         verbose=1,
@@ -121,19 +121,22 @@ def train_task(
         print(f"📂 Loading checkpoint: {checkpoint}")
         model = PPO.load(checkpoint, env=env, device=device)
     else:
+        # Linear learning rate decay: starts at 2e-4, decays to 1e-5
+        lr_schedule = lambda progress: 1e-5 + (2e-4 - 1e-5) * progress
+
         model = PPO(
             policy="MlpPolicy",
             env=env,
-            learning_rate=3e-4,
+            learning_rate=lr_schedule,
             n_steps=2048,
-            batch_size=64,
+            batch_size=128,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
-            clip_range=0.2,
+            clip_range=0.15,
             clip_range_vf=None,
             normalize_advantage=True,
-            ent_coef=0.01,
+            ent_coef=0.005,
             vf_coef=0.5,
             max_grad_norm=0.5,
             tensorboard_log=str(tb_log_dir),
@@ -182,16 +185,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python train.py --task USBInsertion-v0
+    python train.py --task ButtonPress-v0
     python train.py --task all --timesteps 1000000
-    python train.py --task CoinStack-v0 --n_envs 4 --device cpu
+    python train.py --task ButtonPress-v0 --n_envs 4 --device cpu
         """,
     )
     
     parser.add_argument(
         "--task",
         type=str,
-        default="USBInsertion-v0",
+        default="ButtonPress-v0",
         help=f"Task to train on. Options: {', '.join(TASKS + ['all'])}",
     )
     parser.add_argument(

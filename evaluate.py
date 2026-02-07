@@ -7,13 +7,13 @@ Evaluate trained policies and visualize their performance.
 
 Usage:
     # Evaluate with rendering
-    python evaluate.py --task USBInsertion-v0 --render
+    python evaluate.py --task ButtonPress-v0 --render
     
     # Evaluate all tasks
     python evaluate.py --task all --episodes 50
     
     # Evaluate specific checkpoint
-    python evaluate.py --task CoinStack-v0 --model models/CoinStack-v0/best_model.zip
+    python evaluate.py --task ButtonPress-v0 --model models/ButtonPress-v0/best_model.zip
 """
 
 import argparse
@@ -190,7 +190,7 @@ def main():
     parser.add_argument(
         "--task",
         type=str,
-        default="USBInsertion-v0",
+        default="ButtonPress-v0",
         help=f"Task to evaluate. Options: {', '.join(TASKS + ['all'])}",
     )
     parser.add_argument(

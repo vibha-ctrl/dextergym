@@ -4,7 +4,7 @@ Viewer Script - Watch environments with random actions.
 
 Usage:
     python view.py                          # View ButtonPress (default)
-    python view.py --task CubeGrasp-v0      # View specific task
+    python view.py --task ButtonPress-v0    # View specific task
     python view.py --task all               # View all tasks
     python view.py --steps 1000             # Run for more steps
     python view.py --static                 # View static scene (no movement)
@@ -31,9 +31,20 @@ def view_environment(task: str, steps: int = 500, static: bool = False):
     env = gym.make(task, render_mode="human")
     obs, info = env.reset()
     
-    # Stabilize hand position right after reset (run a few steps)
-    # Base position is now in XML, so action=0 keeps hand in place
-    stable_action = np.zeros(env.action_space.shape)
+    # Stabilize: compute action that holds current joint positions in place
+    def hold_action(env):
+        """Compute action that maps to current base joint positions."""
+        action = np.zeros(env.action_space.shape)
+        ctrl_range = env.unwrapped.ctrl_range
+        # For base joints (0-5), set action to hold current qpos
+        for i in range(6):
+            qpos = env.unwrapped.data.qpos[i]
+            low, high = ctrl_range[i]
+            if high - low > 0:
+                action[i] = 2.0 * (qpos - low) / (high - low) - 1.0
+        return np.clip(action, -1.0, 1.0)
+    
+    stable_action = hold_action(env)
     for _ in range(5):
         env.step(stable_action)
     
@@ -50,22 +61,27 @@ def view_environment(task: str, steps: int = 500, static: bool = False):
                 action = env.action_space.sample()
                 # Let base position move randomly, lock rotations
                 action[3:6] = 0.0  # Lock rotations
-                if step % 50 == 0:  # Print less frequently
+                if step % 10 == 0:  # Print every 10 steps
                     data = env.unwrapped.data
                     model = env.unwrapped.model
-                    joint_id = model.joint('button_joint').id
-                    qpos_addr = model.jnt_qposadr[joint_id]
-                    button_qpos = data.qpos[qpos_addr]
-                    status = "PRESSED!" if button_qpos < -0.001 else ""
-                    print(f"Button: {button_qpos:.4f} {status}")
+                    if "ButtonPress" in task:
+                        joint_id = model.joint('button_joint').id
+                        qpos_addr = model.jnt_qposadr[joint_id]
+                        button_qpos = data.qpos[qpos_addr]
+                        status = "PRESSED!" if button_qpos < -0.001 else ""
+                        print(f"Button: {button_qpos:.4f} {status}")
+                    elif "CubeGrasp" in task:
+                        cube_pos = env.unwrapped._get_body_pos("cube")
+                        status = "LIFTED!" if cube_pos[2] > 0.10 else ""
+                        print(f"Cube height: {cube_pos[2]:.4f} {status}")
                 obs, reward, terminated, truncated, info = env.step(action)
                 time.sleep(0.02)
                 
                 if terminated or truncated:
                     print(f"Episode ended at step {step}. Resetting...")
                     obs, info = env.reset()
-                    # Stabilize - base position is in XML, action=0 keeps it there
-                    stable_action = np.zeros(env.action_space.shape)
+                    # Stabilize - hold current base joint positions
+                    stable_action = hold_action(env)
                     for _ in range(5):
                         env.step(stable_action)
                 

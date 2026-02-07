@@ -1,4 +1,4 @@
-<mujoco model="button_press">
+<mujoco model="cube_grasp">
   <include file="shadow.xml"/>
   
   <statistic extent="0.5" center="0 0 0.2"/>
@@ -14,8 +14,7 @@
     <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
       markrgb="0.8 0.8 0.8" width="300" height="300"/>
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
-    <material name="button_red" rgba="0.9 0.15 0.15 1"/>
-    <material name="button_base" rgba="0.3 0.3 0.3 1"/>
+    <material name="cube_blue" rgba="0.2 0.4 0.9 1"/>
   </asset>
 
   <worldbody>
@@ -25,23 +24,17 @@
     <!-- Floor -->
     <geom name="floor" pos="0 0 0" size="1 1 0.05" type="plane" material="groundplane"/>
     
-    <!-- Button with fixed base (glued to ground) -->
-    <body name="button_base" pos="0 0 0.01">
-      <!-- Fixed base - no joint, can't move -->
-      <geom name="button_base_geom" type="cylinder" size="0.05 0.008" material="button_base"
-            contype="1" conaffinity="1"/>
-      <!-- Pressable top - can only slide down -->
-      <body name="button_top" pos="0 0 0.015">
-        <joint name="button_joint" type="slide" axis="0 0 1" range="-0.02 0" damping="0.05" stiffness="0" solreflimit="0.001 1" solimplimit="0.999 0.999 0.0001" limited="true"/>
-        <geom name="button" type="cylinder" size="0.04 0.01" material="button_red" mass="0.05"
-              contype="1" conaffinity="1"/>
-        <site name="button_site" pos="0 0 0.01" size="0.001" rgba="0 0 0 0"/>
-      </body>
+    <!-- Cube - free body that can be grasped and lifted -->
+    <body name="cube" pos="0 0 0.025">
+      <freejoint name="cube_joint"/>
+      <geom name="cube_geom" type="box" size="0.025 0.025 0.025" material="cube_blue" mass="0.1"
+            contype="1" conaffinity="1" friction="1.5 0.5 0.01"/>
+      <site name="cube_site" pos="0 0 0" size="0.001" rgba="0 0 0 0"/>
     </body>
   </worldbody>
 
-  <!-- Default positions for this task - viewer reset will use these -->
-  <!-- qpos order: base(6) + wrist(2) + thumb(5) + ff(4) + mf(4) + rf(4) + lf(5) + button(1) = 31 -->
+  <!-- qpos order: base(6) + wrist(2) + thumb(5) + ff(4) + mf(4) + rf(4) + lf(5) + cube_freejoint(7) = 33 -->
+  <!-- cube freejoint: pos_x, pos_y, pos_z, quat_w, quat_x, quat_y, quat_z -->
   <keyframe>
     <key name="home" qpos="0 0 0 0 0 0
                            0 0
@@ -50,6 +43,6 @@
                            0 0 0 0
                            0 0 0 0
                            0 0 0 0 0
-                           0"/>
+                           0 0 0.025 1 0 0 0"/>
   </keyframe>
 </mujoco>

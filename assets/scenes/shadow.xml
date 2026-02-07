@@ -97,15 +97,15 @@
   <worldbody>
     <!-- Shadow Hand with floating base (translation + limited rotation) -->
     <!-- Initial pos is the default starting position; joints add offsets -->
-    <body name="hand_base" pos="0.35 0 0.15">
+    <body name="hand_base" pos="0.35 0 0.18">
       <!-- Translation: larger range so movement is visible -->
-      <joint name="base_x" type="slide" axis="1 0 0" range="-0.15 0.15" damping="5"/>
-      <joint name="base_y" type="slide" axis="0 1 0" range="-0.15 0.15" damping="5"/>
-      <joint name="base_z" type="slide" axis="0 0 1" range="-0.20 0.15" damping="5"/>
+      <joint name="base_x" type="slide" axis="1 0 0" range="-0.5 0.5" damping="50"/>
+      <joint name="base_y" type="slide" axis="0 1 0" range="-0.5 0.5" damping="50"/>
+      <joint name="base_z" type="slide" axis="0 0 1" range="-0.25 0.5" damping="50"/>
       <!-- Rotation: 1/10th of full range (±18°, ±9°, ±18°) -->
-      <joint name="base_roll" type="hinge" axis="1 0 0" range="-3.14 3.14" damping="1"/>
-      <joint name="base_pitch" type="hinge" axis="0 1 0" range="-3.14 3.14" damping="1"/>
-      <joint name="base_yaw" type="hinge" axis="0 0 1" range="-3.14 3.14" damping="1"/>
+      <joint name="base_roll" type="hinge" axis="1 0 0" range="-0.5 0.5" damping="10"/>
+      <joint name="base_pitch" type="hinge" axis="0 1 0" range="-0.5 0.5" damping="10"/>
+      <joint name="base_yaw" type="hinge" axis="0 0 1" range="-0.5 0.5" damping="10"/>
       
       <body name="rh_forearm" childclass="right_hand" quat="0 -1 0 1">
       <inertial mass="3" pos="0 0 0.09" diaginertia="0.0138 0.0138 0.00744"/>
@@ -298,12 +298,12 @@
 
   <actuator>
     <!-- Base positioning (3 translation + 3 limited rotation) -->
-    <position name="act_base_x" joint="base_x" kp="1000" ctrlrange="-0.15 0.15"/>
-    <position name="act_base_y" joint="base_y" kp="1000" ctrlrange="-0.15 0.15"/>
-    <position name="act_base_z" joint="base_z" kp="1000" ctrlrange="-0.20 0.15"/>
-    <position name="act_base_roll" joint="base_roll" kp="50" ctrlrange="-3.14 3.14"/>
-    <position name="act_base_pitch" joint="base_pitch" kp="50" ctrlrange="-3.14 3.14"/>
-    <position name="act_base_yaw" joint="base_yaw" kp="50" ctrlrange="-3.14 3.14"/>
+    <position name="act_base_x" joint="base_x" kp="50" ctrlrange="-0.5 0.5"/>
+    <position name="act_base_y" joint="base_y" kp="50" ctrlrange="-0.5 0.5"/>
+    <position name="act_base_z" joint="base_z" kp="50" ctrlrange="-0.25 0.5"/>
+    <position name="act_base_roll" joint="base_roll" kp="20" ctrlrange="-0.5 0.5"/>
+    <position name="act_base_pitch" joint="base_pitch" kp="20" ctrlrange="-0.5 0.5"/>
+    <position name="act_base_yaw" joint="base_yaw" kp="20" ctrlrange="-0.5 0.5"/>
     
     <!-- Shadow Hand actuators (20 DoF) -->
     <position name="rh_A_WRJ2" joint="rh_WRJ2" class="wrist_y"/>

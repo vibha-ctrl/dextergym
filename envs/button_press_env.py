@@ -12,18 +12,25 @@ class ButtonPressEnv(BaseDexterousEnv):
         model_path = str(Path(__file__).parent.parent / "assets/scenes/button_press.xml")
         super().__init__(model_path, render_mode)
         self.max_episode_steps = 200
-        self.success_threshold = 0.01  # Button pressed 1cm
+        self.success_threshold = 0.004  # Button pressed 0.4cm
     
     def _reset_task(self):
         # Reset button to unpressed
         self._set_joint_qpos("button_joint", 0.0)
-        # Base position is now set in XML (0.35, 0, 0.35), so qpos=0 is correct
-        self._set_joint_qpos("base_x", 0.0)
-        self._set_joint_qpos("base_y", 0.0)
-        self._set_joint_qpos("base_z", 0.0)
+        
+        # Randomize hand starting position within range for robust training
+        self._set_joint_qpos("base_x", np.random.uniform(-0.05, 0.05))
+        self._set_joint_qpos("base_y", np.random.uniform(-0.05, 0.05))
+        self._set_joint_qpos("base_z", np.random.uniform(-0.05, 0.05))
         self._set_joint_qpos("base_roll", 0.0)
         self._set_joint_qpos("base_pitch", 0.0)
         self._set_joint_qpos("base_yaw", 0.0)
+        
+        # Randomize finger joint angles for robust training
+        # Joints 6-25 are finger joints (after the 6 base joints)
+        for i in range(6, 26):
+            self.data.qpos[i] = np.random.uniform(-0.2, 0.2)
+        
         self.data.qvel[:] = 0.0
         self.data.ctrl[:] = 0.0  # All controls to zero
     
