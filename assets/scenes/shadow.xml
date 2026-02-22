@@ -99,7 +99,7 @@
     <!-- Initial pos is the default starting position; joints add offsets -->
     <body name="hand_base" pos="0.35 0 0.18">
       <!-- Translation: larger range so movement is visible -->
-      <joint name="base_x" type="slide" axis="1 0 0" range="-0.5 0.5" damping="50"/>
+      <joint name="base_x" type="slide" axis="1 0 0" range="-0.8 0.5" damping="50"/>
       <joint name="base_y" type="slide" axis="0 1 0" range="-0.5 0.5" damping="50"/>
       <joint name="base_z" type="slide" axis="0 0 1" range="-0.25 0.5" damping="50"/>
       <!-- Rotation: 1/10th of full range (±18°, ±9°, ±18°) -->
@@ -126,6 +126,7 @@
           <inertial mass="0.3" pos="0 0 0.035" quat="1 0 0 1" diaginertia="0.0005287 0.0003581 0.000191"/>
           <joint class="wrist_x" name="rh_WRJ1"/>
           <site name="grasp_site" pos="0 -.035 0.09" group="4"/>
+          <site name="palm_site" pos="0 0 0.05" size="0.001" rgba="0 0 0 0"/>
           <geom class="plastic_visual" mesh="palm"/>
           <geom size="0.031 0.0035 0.049" pos="0.011 0.0085 0.038" type="box" class="plastic_collision"/>
           <geom size="0.018 0.0085 0.049" pos="-0.002 -0.0035 0.038" type="box" class="plastic_collision"/>
@@ -155,6 +156,7 @@
                   <joint name="rh_FFJ1" class="middle_distal"/>
                   <geom class="plastic_visual" mesh="f_distal_pst"/>
                   <geom class="plastic_collision" type="mesh" mesh="f_distal_pst"/>
+                  <site name="ff_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                 </body>
               </body>
             </body>
@@ -179,6 +181,7 @@
                   <joint name="rh_MFJ1" class="middle_distal"/>
                   <geom class="plastic_visual" mesh="f_distal_pst"/>
                   <geom class="plastic_collision" type="mesh" mesh="f_distal_pst"/>
+                  <site name="mf_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                 </body>
               </body>
             </body>
@@ -203,6 +206,7 @@
                   <joint name="rh_RFJ1" class="middle_distal"/>
                   <geom class="plastic_visual" mesh="f_distal_pst"/>
                   <geom class="plastic_collision" type="mesh" mesh="f_distal_pst"/>
+                  <site name="rf_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                 </body>
               </body>
             </body>
@@ -232,6 +236,7 @@
                     <joint name="rh_LFJ1" class="middle_distal"/>
                     <geom class="plastic_visual" mesh="f_distal_pst"/>
                     <geom class="plastic_collision" type="mesh" mesh="f_distal_pst"/>
+                    <site name="lf_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                   </body>
                 </body>
               </body>
@@ -261,6 +266,7 @@
                     <joint name="rh_THJ1" class="thdistal"/>
                     <geom class="plastic_visual" mesh="th_distal_pst"/>
                     <geom class="plastic_collision" type="mesh" mesh="th_distal_pst"/>
+                    <site name="th_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                   </body>
                 </body>
               </body>
@@ -298,7 +304,7 @@
 
   <actuator>
     <!-- Base positioning (3 translation + 3 limited rotation) -->
-    <position name="act_base_x" joint="base_x" kp="50" ctrlrange="-0.5 0.5"/>
+    <position name="act_base_x" joint="base_x" kp="50" ctrlrange="-0.8 0.5"/>
     <position name="act_base_y" joint="base_y" kp="50" ctrlrange="-0.5 0.5"/>
     <position name="act_base_z" joint="base_z" kp="50" ctrlrange="-0.25 0.5"/>
     <position name="act_base_roll" joint="base_roll" kp="20" ctrlrange="-0.5 0.5"/>

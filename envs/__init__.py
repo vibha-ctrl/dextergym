@@ -4,6 +4,7 @@ Shadow Hand Dexterous Manipulation Environments
 
 Tasks:
     - ButtonPress-v0: Press a red button
+    - CubePush-v0: Push a cube into a target ring
     - CubeGrasp-v0: Grasp and lift a cube
 
 Usage:
@@ -22,6 +23,12 @@ register(
 )
 
 register(
+    id="CubePush-v0",
+    entry_point="envs.cube_push_env:CubePushEnv",
+    max_episode_steps=500,
+)
+
+register(
     id="CubeGrasp-v0",
     entry_point="envs.cube_grasp_env:CubeGraspEnv",
     max_episode_steps=200,
@@ -29,5 +36,6 @@ register(
 
 TASKS = [
     "ButtonPress-v0",
+    "CubePush-v0",
     "CubeGrasp-v0",
 ]
