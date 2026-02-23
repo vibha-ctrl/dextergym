@@ -32,15 +32,11 @@ class CubePushEnv(BaseDexterousEnv):
         # Forward pass to compute fingertip positions
         mujoco.mj_forward(self.model, self.data)
         
-        # Place cube 1 cm to the left of the leftmost fingertip
-        tip_names = ['ff_tip', 'mf_tip', 'rf_tip', 'lf_tip', 'th_tip']
-        tip_xs = []
-        for name in tip_names:
-            sid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, name)
-            tip_xs.append(self.data.site_xpos[sid][0])
-        leftmost_x = min(tip_xs)
+        # Place cube 2mm to the left of the middle fingertip
+        mf_sid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, 'mf_tip')
+        mf_tip_x = self.data.site_xpos[mf_sid][0]
         
-        cube_x = leftmost_x - 0.01 - 0.025  # 1cm gap + cube half-width
+        cube_x = mf_tip_x - 0.002 - 0.025  # 2mm gap + cube half-width
         cube_y = np.random.uniform(-0.02, 0.02)
         
         cube_qpos_start = self.model.jnt_qposadr[self.model.joint('cube_joint').id]
@@ -92,36 +88,28 @@ class CubePushEnv(BaseDexterousEnv):
     def _get_reward(self) -> float:
         cube_pos = self._get_cube_pos()
         
-        # 1) REACH: closest fingertip to cube side (XY only, ignore Z)
-        cube_right_face_xy = np.array([cube_pos[0] + 0.025, cube_pos[1]])
-        tips = self._get_fingertip_positions()
-        closest_tip_dist = min(
-            np.linalg.norm(tp[:2] - cube_right_face_xy) for tp in tips.values()
-        )
-        reach_reward = -closest_tip_dist * 20.0
-        
-        # 2) MOVE FORWARD: directly reward hand base_x being lower (= closer to cube/target)
+        # 1) MOVE LEFT: dominant signal — just move the hand left
         base_x = self._get_joint_qpos("base_x")
-        forward_reward = -base_x * 5.0  # lower base_x = more reward
+        move_reward = -base_x * 50.0  # base_x=0.08 → -4.0, base_x=-0.15 → +7.5
+        
+        # 2) CONTACT: big bonus for touching cube (fingers start 2mm away,
+        #    moving left naturally causes contact)
+        contact_reward = 10.0 if self._is_cube_touched_by_hand() else 0.0
         
         # 3) PROGRESS: reward cube moving closer to target
         cube_to_target = np.linalg.norm(cube_pos[:2] - self.target_pos)
         progress = 0.0
         if self.prev_cube_to_target is not None:
-            progress = (self.prev_cube_to_target - cube_to_target) * 300.0
+            progress = (self.prev_cube_to_target - cube_to_target) * 500.0
         self.prev_cube_to_target = cube_to_target
         
-        # 4) CONTACT: bonus for touching cube
-        contact_reward = 3.0 if self._is_cube_touched_by_hand() else 0.0
+        # 4) CUBE PROXIMITY: reward cube being close to target
+        cube_proximity = -cube_to_target * 30.0  # closer to ring = less negative
         
         # 5) SUCCESS
         success_bonus = 100.0 if self._is_success() else 0.0
         
-        # 6) Light penalties (small so they don't discourage movement)
-        cube_height_penalty = -abs(cube_pos[2] - 0.025) * 3.0
-        
-        return (reach_reward + forward_reward + progress +
-                contact_reward + success_bonus + cube_height_penalty)
+        return move_reward + contact_reward + progress + cube_proximity + success_bonus
     
     def _is_success(self) -> bool:
         cube_pos = self._get_cube_pos()

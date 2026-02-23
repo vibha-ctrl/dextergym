@@ -106,6 +106,15 @@ def evaluate_policy(
             
             if render:
                 time.sleep(0.01)  # Slow down for visualization
+                # Debug: print positions every 50 steps
+                if episode_length % 50 == 0 and hasattr(env.unwrapped, '_get_cube_pos'):
+                    e = env.unwrapped
+                    cube = e._get_cube_pos()
+                    palm = e._get_palm_pos()
+                    palm_to_cube = np.linalg.norm(palm[:2] - cube[:2])
+                    contact = e._is_cube_touched_by_hand() if hasattr(e, '_is_cube_touched_by_hand') else "?"
+                    base_x = e.data.qpos[0]
+                    print(f"    step {episode_length:3d} | base_x={base_x:+.3f} palm=({palm[0]:+.3f},{palm[1]:+.3f},{palm[2]:+.3f}) cube=({cube[0]:+.3f},{cube[1]:+.3f}) palm→cube={palm_to_cube:.3f}m contact={contact}")
         
         episode_rewards.append(episode_reward)
         episode_lengths.append(episode_length)
