@@ -64,6 +64,10 @@ class ButtonPressEnv(BaseDexterousEnv):
         
         return dist_reward + press_reward + success_bonus
     
+    def _is_terminated(self) -> bool:
+        """End episode early if button is already pressed."""
+        return self._is_success()
+    
     def _is_success(self) -> bool:
         button_pos = self._get_joint_qpos("button_joint")
         return button_pos < -self.success_threshold

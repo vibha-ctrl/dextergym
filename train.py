@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
@@ -35,6 +36,100 @@ from stable_baselines3.common.callbacks import (
 )
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
+
+
+class SuccessRateEvalCallback(EvalCallback):
+    """EvalCallback that saves best model by success rate instead of mean reward."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.best_success_rate = -1.0
+    
+    def _on_step(self) -> bool:
+        # Run parent's _on_step which does evaluation, logging, etc.
+        # But we override the "best model" saving logic
+        continue_training = True
+        
+        if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
+            # Reset success buffer
+            self._is_success_buffer = []
+            
+            from stable_baselines3.common.evaluation import evaluate_policy
+            episode_rewards, episode_lengths = evaluate_policy(
+                self.model,
+                self.eval_env,
+                n_eval_episodes=self.n_eval_episodes,
+                render=self.render,
+                deterministic=self.deterministic,
+                return_episode_rewards=True,
+                warn=self.warn,
+                callback=self._log_success_callback,
+            )
+            
+            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
+            mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
+            self.last_mean_reward = float(mean_reward)
+            
+            if self.verbose >= 1:
+                print(f"Eval num_timesteps={self.num_timesteps}, "
+                      f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
+                print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
+            
+            # Log to tensorboard
+            self.logger.record("eval/mean_reward", float(mean_reward))
+            self.logger.record("eval/mean_ep_length", mean_ep_length)
+            
+            # Compute and log success rate
+            success_rate = 0.0
+            if len(self._is_success_buffer) > 0:
+                success_rate = np.mean(self._is_success_buffer)
+                if self.verbose >= 1:
+                    print(f"Success rate: {100 * success_rate:.2f}%")
+                self.logger.record("eval/success_rate", success_rate)
+            
+            self.logger.dump(self.num_timesteps)
+            
+            # Save best model by SUCCESS RATE (not mean reward)
+            if success_rate > self.best_success_rate:
+                if self.verbose >= 1:
+                    print(f"New best success rate: {100*success_rate:.1f}%")
+                self.best_success_rate = success_rate
+                if self.best_model_save_path is not None:
+                    self.model.save(os.path.join(self.best_model_save_path, "best_model"))
+            elif success_rate == self.best_success_rate and mean_reward > getattr(self, 'best_mean_reward', -np.inf):
+                # Tie-break: same success rate, higher reward wins
+                if self.verbose >= 1:
+                    print(f"New best mean reward (same success rate {100*success_rate:.1f}%)!")
+                if self.best_model_save_path is not None:
+                    self.model.save(os.path.join(self.best_model_save_path, "best_model"))
+            
+            self.best_mean_reward = max(getattr(self, 'best_mean_reward', -np.inf), float(mean_reward))
+            
+            # Store eval results
+            self.evaluations_timesteps.append(self.num_timesteps)
+            self.evaluations_results.append(episode_rewards)
+            self.evaluations_length.append(episode_lengths)
+            
+            kwargs = {}
+            if len(self._is_success_buffer) > 0:
+                self.evaluations_successes.append(self._is_success_buffer)
+                kwargs = dict(successes=self.evaluations_successes)
+            
+            np.savez(
+                self.log_path,
+                timesteps=self.evaluations_timesteps,
+                results=self.evaluations_results,
+                ep_lengths=self.evaluations_length,
+                **kwargs,
+            )
+            
+            # Trigger callbacks
+            if self.callback_on_new_best is not None and success_rate >= self.best_success_rate:
+                continue_training = self.callback_on_new_best.on_step()
+            if self.callback is not None:
+                continue_training = continue_training and self._on_event()
+        
+        return continue_training
 
 # Register custom environments
 import envs
@@ -95,8 +190,8 @@ def train_task(
     # Create evaluation environment
     eval_env = DummyVecEnv([make_env(task, 0, seed + 100)])
     
-    # Callbacks
-    eval_callback = EvalCallback(
+    # Callbacks — saves best model by SUCCESS RATE, not mean reward
+    eval_callback = SuccessRateEvalCallback(
         eval_env,
         best_model_save_path=str(model_dir),
         log_path=str(log_dir),

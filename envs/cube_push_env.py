@@ -88,28 +88,38 @@ class CubePushEnv(BaseDexterousEnv):
     def _get_reward(self) -> float:
         cube_pos = self._get_cube_pos()
         
-        # 1) MOVE LEFT: dominant signal — just move the hand left
+        # 1) MOVE LEFT: reward hand moving toward ring, but NOT past it
         base_x = self._get_joint_qpos("base_x")
-        move_reward = -base_x * 50.0  # base_x=0.08 → -4.0, base_x=-0.15 → +7.5
+        target_x = self.target_pos[0]  # -0.15
+        clamped_x = max(base_x, target_x)  # stops rewarding past -0.15
+        move_reward = -clamped_x * 50.0
         
-        # 2) CONTACT: big bonus for touching cube (fingers start 2mm away,
-        #    moving left naturally causes contact)
+        # 2) OVERSHOOT PENALTY: punish going past the ring
+        overshoot_penalty = 0.0
+        if base_x < target_x:
+            overshoot_penalty = (target_x - base_x) * 100.0  # e.g. 0.1 past → -10/step
+        
+        # 3) CONTACT: bonus for touching cube
         contact_reward = 10.0 if self._is_cube_touched_by_hand() else 0.0
         
-        # 3) PROGRESS: reward cube moving closer to target
+        # 4) PROGRESS: reward cube moving toward target (delta)
         cube_to_target = np.linalg.norm(cube_pos[:2] - self.target_pos)
         progress = 0.0
         if self.prev_cube_to_target is not None:
             progress = (self.prev_cube_to_target - cube_to_target) * 500.0
         self.prev_cube_to_target = cube_to_target
         
-        # 4) CUBE PROXIMITY: reward cube being close to target
-        cube_proximity = -cube_to_target * 30.0  # closer to ring = less negative
+        # 5) CUBE PROXIMITY: reward cube being close to target
+        cube_proximity = -cube_to_target * 30.0
         
-        # 5) SUCCESS
+        # 6) SUCCESS
         success_bonus = 100.0 if self._is_success() else 0.0
         
-        return move_reward + contact_reward + progress + cube_proximity + success_bonus
+        return move_reward - overshoot_penalty + contact_reward + progress + cube_proximity + success_bonus
+    
+    def _is_terminated(self) -> bool:
+        """End episode early if cube is already in the ring."""
+        return self._is_success()
     
     def _is_success(self) -> bool:
         cube_pos = self._get_cube_pos()
