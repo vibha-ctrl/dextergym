@@ -18,8 +18,8 @@ class CubePushEnv(BaseDexterousEnv):
     
     def _reset_task(self):
         # Hand position
-        self._set_joint_qpos("base_x", 0.08 + np.random.uniform(-0.02, 0.02))
-        self._set_joint_qpos("base_y", np.random.uniform(-0.02, 0.02))
+        self._set_joint_qpos("base_x", 0.08 + np.random.uniform(-0.01, 0.01))
+        self._set_joint_qpos("base_y", np.random.uniform(-0.01, 0.01))
         self._set_joint_qpos("base_z", -0.145)  # Lowered so fingertips are at cube height (z≈0.025)
         self._set_joint_qpos("base_roll", 0.0)
         self._set_joint_qpos("base_pitch", 0.0)
@@ -37,7 +37,7 @@ class CubePushEnv(BaseDexterousEnv):
         mf_tip_x = self.data.site_xpos[mf_sid][0]
         
         cube_x = mf_tip_x - 0.002 - 0.025  # 2mm gap + cube half-width
-        cube_y = np.random.uniform(-0.02, 0.02)
+        cube_y = np.random.uniform(-0.01, 0.01)
         
         cube_qpos_start = self.model.jnt_qposadr[self.model.joint('cube_joint').id]
         self.data.qpos[cube_qpos_start:cube_qpos_start + 3] = [cube_x, cube_y, 0.025]
@@ -88,16 +88,16 @@ class CubePushEnv(BaseDexterousEnv):
     def _get_reward(self) -> float:
         cube_pos = self._get_cube_pos()
         
-        # 1) MOVE LEFT: reward hand moving toward ring, but NOT past it
+        # 1) MOVE LEFT: reward hand moving toward ring, capped at target
         base_x = self._get_joint_qpos("base_x")
         target_x = self.target_pos[0]  # -0.15
-        clamped_x = max(base_x, target_x)  # stops rewarding past -0.15
+        clamped_x = max(base_x, target_x)
         move_reward = -clamped_x * 50.0
         
         # 2) OVERSHOOT PENALTY: punish going past the ring
         overshoot_penalty = 0.0
         if base_x < target_x:
-            overshoot_penalty = (target_x - base_x) * 100.0  # e.g. 0.1 past → -10/step
+            overshoot_penalty = (target_x - base_x) * 300.0
         
         # 3) CONTACT: bonus for touching cube
         contact_reward = 10.0 if self._is_cube_touched_by_hand() else 0.0
@@ -112,10 +112,21 @@ class CubePushEnv(BaseDexterousEnv):
         # 5) CUBE PROXIMITY: reward cube being close to target
         cube_proximity = -cube_to_target * 30.0
         
-        # 6) SUCCESS
-        success_bonus = 100.0 if self._is_success() else 0.0
+        # 6) CUBE HEIGHT PENALTY: penalize cube flipping
+        cube_height_penalty = max(0, cube_pos[2] - 0.03) * 200.0
         
-        return move_reward - overshoot_penalty + contact_reward + progress + cube_proximity + success_bonus
+        # 7) Y-DRIFT PENALTY: penalize cube edge drifting outside ring (radius 0.055, cube half-width 0.025)
+        y_drift = abs(cube_pos[1] - self.target_pos[1])
+        y_drift_penalty = max(0, y_drift - 0.03) * 100.0  # 0.055 - 0.025 = 0.03
+        
+        # 8) SUCCESS: bonus scales with remaining steps so early success always beats farming
+        if self._is_success():
+            remaining = self.max_episode_steps - self.current_step
+            success_bonus = remaining * 20.0  # 20 > 17.5 (move+contact per step)
+        else:
+            success_bonus = 0.0
+        
+        return move_reward - overshoot_penalty + contact_reward + progress + cube_proximity - cube_height_penalty - y_drift_penalty + success_bonus
     
     def _is_terminated(self) -> bool:
         """End episode early if cube is already in the ring."""

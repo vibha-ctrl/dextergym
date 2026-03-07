@@ -28,7 +28,7 @@ from datetime import datetime
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import (
     EvalCallback,
     CheckpointCallback,
@@ -51,6 +51,10 @@ class SuccessRateEvalCallback(EvalCallback):
         continue_training = True
         
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
+            # Sync normalization stats from training env to eval env
+            from stable_baselines3.common.vec_env import sync_envs_normalization
+            sync_envs_normalization(self.training_env, self.eval_env)
+            
             # Reset success buffer
             self._is_success_buffer = []
             
@@ -96,12 +100,17 @@ class SuccessRateEvalCallback(EvalCallback):
                 self.best_success_rate = success_rate
                 if self.best_model_save_path is not None:
                     self.model.save(os.path.join(self.best_model_save_path, "best_model"))
+                    # Save VecNormalize stats alongside best model
+                    if hasattr(self.training_env, 'save'):
+                        self.training_env.save(os.path.join(self.best_model_save_path, "vec_normalize.pkl"))
             elif success_rate == self.best_success_rate and mean_reward > getattr(self, 'best_mean_reward', -np.inf):
                 # Tie-break: same success rate, higher reward wins
                 if self.verbose >= 1:
                     print(f"New best mean reward (same success rate {100*success_rate:.1f}%)!")
                 if self.best_model_save_path is not None:
                     self.model.save(os.path.join(self.best_model_save_path, "best_model"))
+                    if hasattr(self.training_env, 'save'):
+                        self.training_env.save(os.path.join(self.best_model_save_path, "vec_normalize.pkl"))
             
             self.best_mean_reward = max(getattr(self, 'best_mean_reward', -np.inf), float(mean_reward))
             
@@ -186,9 +195,11 @@ def train_task(
     
     # Create parallel training environments
     env = SubprocVecEnv([make_env(task, i, seed) for i in range(n_envs)])
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0)
     
-    # Create evaluation environment
+    # Create evaluation environment (uses synced stats from training env)
     eval_env = DummyVecEnv([make_env(task, 0, seed + 100)])
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False)
     
     # Callbacks — saves best model by SUCCESS RATE, not mean reward
     eval_callback = SuccessRateEvalCallback(
@@ -253,9 +264,10 @@ def train_task(
     except KeyboardInterrupt:
         print("\n⚠️ Training interrupted by user")
     
-    # Save final model
+    # Save final model + VecNormalize stats
     final_model_path = model_dir / "final_model"
     model.save(str(final_model_path))
+    env.save(str(model_dir / "vec_normalize.pkl"))
     
     # Report
     elapsed = datetime.now() - start_time

@@ -25,6 +25,7 @@ import time
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from tqdm import tqdm
 
 # Register custom environments
@@ -66,7 +67,23 @@ def evaluate_policy(
     
     # Create environment
     render_mode = "human" if render else None
-    env = gym.make(task, render_mode=render_mode)
+    raw_env = gym.make(task, render_mode=render_mode)
+    
+    # Check for VecNormalize stats (saved during training)
+    model_dir = Path(model_path).parent
+    vec_norm_path = model_dir / "vec_normalize.pkl"
+    
+    if vec_norm_path.exists():
+        print(f"   Loading VecNormalize stats: {vec_norm_path}")
+        # Wrap in DummyVecEnv first (VecNormalize requires a VecEnv)
+        vec_env = DummyVecEnv([lambda: raw_env])
+        env = VecNormalize.load(str(vec_norm_path), vec_env)
+        env.training = False      # Don't update stats during eval
+        env.norm_reward = False   # Don't normalize rewards during eval
+        use_vec_env = True
+    else:
+        env = raw_env
+        use_vec_env = False
     
     # Load model
     model = PPO.load(model_path)
@@ -91,24 +108,36 @@ def evaluate_policy(
         iterator = tqdm(iterator, desc="Evaluating")
     
     for ep in iterator:
-        obs, info = env.reset()
+        if use_vec_env:
+            obs = env.reset()
+        else:
+            obs, info = env.reset()
         done = False
         episode_reward = 0.0
         episode_length = 0
+        ep_info = {}
         
         while not done:
             action, _ = model.predict(obs, deterministic=deterministic)
-            obs, reward, terminated, truncated, info = env.step(action)
+            
+            if use_vec_env:
+                obs, reward, dones, infos = env.step(action)
+                reward = reward[0]
+                done = dones[0]
+                ep_info = infos[0]
+            else:
+                obs, reward, terminated, truncated, ep_info = env.step(action)
+                done = terminated or truncated
             
             episode_reward += reward
             episode_length += 1
-            done = terminated or truncated
             
             if render:
                 time.sleep(0.01)  # Slow down for visualization
                 # Debug: print positions every 50 steps
-                if episode_length % 50 == 0 and hasattr(env.unwrapped, '_get_cube_pos'):
-                    e = env.unwrapped
+                actual_env = raw_env.unwrapped if use_vec_env else env.unwrapped
+                if episode_length % 50 == 0 and hasattr(actual_env, '_get_cube_pos'):
+                    e = actual_env
                     cube = e._get_cube_pos()
                     palm = e._get_palm_pos()
                     palm_to_cube = np.linalg.norm(palm[:2] - cube[:2])
@@ -118,10 +147,10 @@ def evaluate_policy(
         
         episode_rewards.append(episode_reward)
         episode_lengths.append(episode_length)
-        successes.append(info.get("is_success", False))
+        successes.append(ep_info.get("is_success", False))
         
         if verbose and render:
-            status = "✅" if info.get("is_success", False) else "❌"
+            status = "✅" if ep_info.get("is_success", False) else "❌"
             print(f"  Episode {ep+1}: Reward={episode_reward:.1f}, Steps={episode_length}, {status}")
     
     env.close()
