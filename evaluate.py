@@ -143,7 +143,14 @@ def evaluate_policy(
                     palm_to_cube = np.linalg.norm(palm[:2] - cube[:2])
                     contact = e._is_cube_touched_by_hand() if hasattr(e, '_is_cube_touched_by_hand') else "?"
                     base_x = e.data.qpos[0]
-                    print(f"    step {episode_length:3d} | base_x={base_x:+.3f} palm=({palm[0]:+.3f},{palm[1]:+.3f},{palm[2]:+.3f}) cube=({cube[0]:+.3f},{cube[1]:+.3f}) palm→cube={palm_to_cube:.3f}m contact={contact}")
+                    # Finger info
+                    n_fingers = e._count_finger_contacts() if hasattr(e, '_count_finger_contacts') else 0
+                    tips = e._get_fingertip_positions() if hasattr(e, '_get_fingertip_positions') else {}
+                    tip_str = ""
+                    for name, pos in tips.items():
+                        dist = np.linalg.norm(pos - cube)
+                        tip_str += f" {name}={dist:.3f}"
+                    print(f"    step {episode_length:3d} | base_x={base_x:+.3f} palm=({palm[0]:+.3f},{palm[1]:+.3f},{palm[2]:+.3f}) cube=({cube[0]:+.3f},{cube[1]:+.3f},{cube[2]:+.3f}) palm->cube={palm_to_cube:.3f}m fingers={n_fingers}{tip_str}")
         
         episode_rewards.append(episode_reward)
         episode_lengths.append(episode_length)

@@ -266,7 +266,6 @@
                     <joint name="rh_THJ1" class="thdistal"/>
                     <geom class="plastic_visual" mesh="th_distal_pst"/>
                     <geom class="plastic_collision" type="mesh" mesh="th_distal_pst"/>
-                    <site name="th_tip" pos="0 0 0.026" size="0.001" rgba="0 0 0 0"/>
                   </body>
                 </body>
               </body>

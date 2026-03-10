@@ -5,7 +5,7 @@ Shadow Hand Dexterous Manipulation Environments
 Tasks:
     - ButtonPress-v0: Press a red button
     - CubePush-v0: Push a cube into a target ring
-    - CubeGrasp-v0: Grasp and lift a cube
+    - CubePickup-v0: Grasp and lift a cube to a target height
 
 Usage:
     import gymnasium as gym
@@ -29,13 +29,13 @@ register(
 )
 
 register(
-    id="CubeGrasp-v0",
-    entry_point="envs.cube_grasp_env:CubeGraspEnv",
-    max_episode_steps=200,
+    id="CubePickup-v0",
+    entry_point="envs.cube_pickup_env:CubePickupEnv",
+    max_episode_steps=500,
 )
 
 TASKS = [
     "ButtonPress-v0",
     "CubePush-v0",
-    "CubeGrasp-v0",
+    "CubePickup-v0",
 ]
