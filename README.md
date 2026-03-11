@@ -10,6 +10,14 @@ Shadow Hand dexterous manipulation environments for reinforcement learning, buil
 | `CubePush-v0` | <img src="assets/images/cubepush.gif" width="200"> | Cube inside ring |
 | `CubePickup-v0` | <img src="assets/images/cubepickup.gif" width="200"> | Cube lifted to 10cm with 2+ fingers |
 
+### Results
+
+| Success Rate | Mean Episode Length |
+|:---:|:---:|
+| ![success_rate](assets/images/successrate.png) | ![episode_length](assets/images/episodelength.png) |
+
+All three tasks reach 90%+ success rate within 1M timesteps of PPO training.
+
 ## Installation
 
 ```bash
@@ -74,14 +82,6 @@ All tasks use **delta actions** — the agent outputs a nudge (±3% of joint ran
 - **Normalization**: VecNormalize for observation and reward normalization
 - **Evaluation**: Custom callback saves the best model by success rate
 - **Parallel envs**: 8 SubprocVecEnv workers
-
-## Results
-
-| Success Rate | Mean Episode Length |
-|:---:|:---:|
-| ![success_rate](assets/images/successrate.png) | ![episode_length](assets/images/episodelength.png) |
-
-All three tasks reach 90%+ success rate within 1M timesteps of PPO training.
 
 ## Notes
 
