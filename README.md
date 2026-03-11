@@ -4,11 +4,11 @@ Shadow Hand dexterous manipulation environments for reinforcement learning, buil
 
 ## Tasks
 
-| Task | Description | Success Criteria | Action Type |
-|------|-------------|-----------------|-------------|
-| `ButtonPress-v0` | Press a red button with the hand | Button pressed >4mm | Delta |
-| `CubePush-v0` | Push a cube into a target ring | Cube inside ring | Delta |
-| `CubePickup-v0` | Grasp and lift a cube to 10cm | Cube at height with 2+ finger contacts | Delta |
+| Task | Demo | Success Criteria |
+|------|------|-----------------|
+| `ButtonPress-v0` | <img src="assets/images/buttonpress.gif" width="200"> | Button pressed >4mm |
+| `CubePush-v0` | <img src="assets/images/cubepush.gif" width="200"> | Cube inside ring |
+| `CubePickup-v0` | <img src="assets/images/cubepickup.gif" width="200"> | Cube lifted to 10cm with 2+ fingers |
 
 ## Installation
 
@@ -75,8 +75,20 @@ All tasks use **delta actions** — the agent outputs a nudge (±3% of joint ran
 - **Evaluation**: Custom callback saves the best model by success rate
 - **Parallel envs**: 8 SubprocVecEnv workers
 
+## Results
+
+| Success Rate | Mean Episode Length |
+|:---:|:---:|
+| ![success_rate](assets/images/successrate.png) | ![episode_length](assets/images/episodelength.png) |
+
+All three tasks reach 90%+ success rate within 1M timesteps of PPO training.
+
 ## Notes
 
 - All task objects use **primitive collision shapes** (box, sphere, cylinder, capsule) with stiff contact parameters to prevent penetration
 - Contact stiffness: `solref="0.001 1" solimp="0.99 0.99 0.001"`
 - Early termination on success with remaining-step bonus rewards
+
+## Acknowledgments
+
+The Shadow Hand model is from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) by Shadow Robot Company Ltd, licensed under [Apache 2.0](assets/mujoco_menagerie/shadow_hand/LICENSE).
