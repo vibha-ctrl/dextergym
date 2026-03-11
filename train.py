@@ -1,21 +1,10 @@
 #!/usr/bin/env python3
 """
-Training Script for Dexterous Manipulation Benchmark
-====================================================
-
-Train PPO policies on dexterous manipulation tasks.
+Train PPO policies on Shadow Hand manipulation tasks.
 
 Usage:
-    # Train single task
     python train.py --task ButtonPress-v0
-    
-    # Train all tasks
-    python train.py --task all
-    
-    # Custom timesteps
-    python train.py --task ButtonPress-v0 --timesteps 1000000
-    
-    # Resume training
+    python train.py --task all --timesteps 1000000
     python train.py --task ButtonPress-v0 --checkpoint models/ButtonPress-v0/best_model.zip
 """
 
@@ -37,25 +26,25 @@ from stable_baselines3.common.callbacks import (
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 
+import envs
+from envs import TASKS
+
 
 class SuccessRateEvalCallback(EvalCallback):
-    """EvalCallback that saves best model by success rate instead of mean reward."""
+    """Saves the best model by success rate (with mean reward as tie-breaker)."""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.best_success_rate = -1.0
     
     def _on_step(self) -> bool:
-        # Run parent's _on_step which does evaluation, logging, etc.
-        # But we override the "best model" saving logic
         continue_training = True
         
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
-            # Sync normalization stats from training env to eval env
+            # Sync normalization stats before evaluation
             from stable_baselines3.common.vec_env import sync_envs_normalization
             sync_envs_normalization(self.training_env, self.eval_env)
             
-            # Reset success buffer
             self._is_success_buffer = []
             
             from stable_baselines3.common.evaluation import evaluate_policy
@@ -70,20 +59,19 @@ class SuccessRateEvalCallback(EvalCallback):
                 callback=self._log_success_callback,
             )
             
-            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
-            mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
-            self.last_mean_reward = float(mean_reward)
+            mean_reward = float(np.mean(episode_rewards))
+            std_reward = float(np.std(episode_rewards))
+            mean_ep_length = float(np.mean(episode_lengths))
+            self.last_mean_reward = mean_reward
             
             if self.verbose >= 1:
                 print(f"Eval num_timesteps={self.num_timesteps}, "
                       f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
-                print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
+                print(f"Episode length: {mean_ep_length:.2f} +/- {np.std(episode_lengths):.2f}")
             
-            # Log to tensorboard
-            self.logger.record("eval/mean_reward", float(mean_reward))
+            self.logger.record("eval/mean_reward", mean_reward)
             self.logger.record("eval/mean_ep_length", mean_ep_length)
             
-            # Compute and log success rate
             success_rate = 0.0
             if len(self._is_success_buffer) > 0:
                 success_rate = np.mean(self._is_success_buffer)
@@ -93,28 +81,20 @@ class SuccessRateEvalCallback(EvalCallback):
             
             self.logger.dump(self.num_timesteps)
             
-            # Save best model by SUCCESS RATE (not mean reward)
+            # Save best model: prioritize success rate, break ties with mean reward
             if success_rate > self.best_success_rate:
                 if self.verbose >= 1:
                     print(f"New best success rate: {100*success_rate:.1f}%")
                 self.best_success_rate = success_rate
-                if self.best_model_save_path is not None:
-                    self.model.save(os.path.join(self.best_model_save_path, "best_model"))
-                    # Save VecNormalize stats alongside best model
-                    if hasattr(self.training_env, 'save'):
-                        self.training_env.save(os.path.join(self.best_model_save_path, "vec_normalize.pkl"))
+                self._save_best_model()
             elif success_rate == self.best_success_rate and mean_reward > getattr(self, 'best_mean_reward', -np.inf):
-                # Tie-break: same success rate, higher reward wins
                 if self.verbose >= 1:
                     print(f"New best mean reward (same success rate {100*success_rate:.1f}%)!")
-                if self.best_model_save_path is not None:
-                    self.model.save(os.path.join(self.best_model_save_path, "best_model"))
-                    if hasattr(self.training_env, 'save'):
-                        self.training_env.save(os.path.join(self.best_model_save_path, "vec_normalize.pkl"))
+                self._save_best_model()
             
-            self.best_mean_reward = max(getattr(self, 'best_mean_reward', -np.inf), float(mean_reward))
+            self.best_mean_reward = max(getattr(self, 'best_mean_reward', -np.inf), mean_reward)
             
-            # Store eval results
+            # Store evaluation history
             self.evaluations_timesteps.append(self.num_timesteps)
             self.evaluations_results.append(episode_rewards)
             self.evaluations_length.append(episode_lengths)
@@ -132,21 +112,23 @@ class SuccessRateEvalCallback(EvalCallback):
                 **kwargs,
             )
             
-            # Trigger callbacks
             if self.callback_on_new_best is not None and success_rate >= self.best_success_rate:
                 continue_training = self.callback_on_new_best.on_step()
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
         
         return continue_training
-
-# Register custom environments
-import envs
-from envs import TASKS
+    
+    def _save_best_model(self):
+        """Save model and VecNormalize stats."""
+        if self.best_model_save_path is not None:
+            self.model.save(os.path.join(self.best_model_save_path, "best_model"))
+            if hasattr(self.training_env, 'save'):
+                self.training_env.save(os.path.join(self.best_model_save_path, "vec_normalize.pkl"))
 
 
 def make_env(env_id: str, rank: int, seed: int = 0):
-    """Create a wrapped environment."""
+    """Create a monitored environment instance for vectorized training."""
     def _init():
         env = gym.make(env_id)
         env = Monitor(env)
@@ -164,19 +146,9 @@ def train_task(
     seed: int = 42,
     device: str = "auto",
 ):
-    """
-    Train a PPO policy on a task.
-    
-    Args:
-        task: Environment ID (e.g., "USBInsertion-v0")
-        total_timesteps: Total training timesteps
-        n_envs: Number of parallel environments
-        checkpoint: Path to checkpoint to resume from
-        seed: Random seed
-        device: Device to use ("cuda", "cpu", or "auto")
-    """
+    """Train a PPO policy on a single task."""
     print(f"\n{'='*60}")
-    print(f"🎯 Training: {task}")
+    print(f"Training: {task}")
     print(f"{'='*60}")
     print(f"  Timesteps: {total_timesteps:,}")
     print(f"  Parallel envs: {n_envs}")
@@ -184,7 +156,6 @@ def train_task(
     print(f"  Seed: {seed}")
     print()
     
-    # Create directories
     log_dir = Path(f"logs/{task}")
     model_dir = Path(f"models/{task}")
     tb_log_dir = Path(f"tb_logs/{task}")
@@ -193,15 +164,14 @@ def train_task(
     model_dir.mkdir(parents=True, exist_ok=True)
     tb_log_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create parallel training environments
+    # Training env: parallel with observation + reward normalization
     env = SubprocVecEnv([make_env(task, i, seed) for i in range(n_envs)])
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0)
     
-    # Create evaluation environment (uses synced stats from training env)
+    # Eval env: single process, no reward normalization (stats synced from training env)
     eval_env = DummyVecEnv([make_env(task, 0, seed + 100)])
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False)
     
-    # Callbacks — saves best model by SUCCESS RATE, not mean reward
     eval_callback = SuccessRateEvalCallback(
         eval_env,
         best_model_save_path=str(model_dir),
@@ -222,12 +192,11 @@ def train_task(
     
     callbacks = CallbackList([eval_callback, checkpoint_callback])
     
-    # Create or load model
     if checkpoint:
-        print(f"📂 Loading checkpoint: {checkpoint}")
+        print(f"Loading checkpoint: {checkpoint}")
         model = PPO.load(checkpoint, env=env, device=device)
     else:
-        # Linear learning rate decay: starts at 2e-4, decays to 1e-5
+        # Linear LR decay from 2e-4 to 1e-5
         lr_schedule = lambda progress: 1e-5 + (2e-4 - 1e-5) * progress
 
         model = PPO(
@@ -251,8 +220,7 @@ def train_task(
             verbose=1,
         )
     
-    # Train
-    print(f"\n🚀 Starting training...")
+    print(f"\nStarting training...")
     start_time = datetime.now()
     
     try:
@@ -262,24 +230,22 @@ def train_task(
             progress_bar=True,
         )
     except KeyboardInterrupt:
-        print("\n⚠️ Training interrupted by user")
+        print("\nTraining interrupted by user")
     
-    # Save final model + VecNormalize stats
+    # Save final model and normalization stats
     final_model_path = model_dir / "final_model"
     model.save(str(final_model_path))
     env.save(str(model_dir / "vec_normalize.pkl"))
     
-    # Report
     elapsed = datetime.now() - start_time
     print(f"\n{'='*60}")
-    print(f"✅ Finished training {task}")
-    print(f"   Time elapsed: {elapsed}")
-    print(f"   Model saved to: {final_model_path}")
-    print(f"   Best model at: {model_dir / 'best_model.zip'}")
-    print(f"   TensorBoard logs: {tb_log_dir}")
+    print(f"Finished training {task}")
+    print(f"  Time elapsed: {elapsed}")
+    print(f"  Model saved to: {final_model_path}")
+    print(f"  Best model at: {model_dir / 'best_model.zip'}")
+    print(f"  TensorBoard logs: {tb_log_dir}")
     print(f"{'='*60}\n")
     
-    # Cleanup
     env.close()
     eval_env.close()
     
@@ -298,60 +264,33 @@ Examples:
         """,
     )
     
-    parser.add_argument(
-        "--task",
-        type=str,
-        default="ButtonPress-v0",
-        help=f"Task to train on. Options: {', '.join(TASKS + ['all'])}",
-    )
-    parser.add_argument(
-        "--timesteps",
-        type=int,
-        default=500_000,
-        help="Total training timesteps (default: 500000)",
-    )
-    parser.add_argument(
-        "--n_envs",
-        type=int,
-        default=8,
-        help="Number of parallel environments (default: 8)",
-    )
-    parser.add_argument(
-        "--checkpoint",
-        type=str,
-        default=None,
-        help="Path to checkpoint to resume training from",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed (default: 42)",
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="auto",
-        choices=["auto", "cuda", "cpu"],
-        help="Device to use (default: auto)",
-    )
+    parser.add_argument("--task", type=str, default="ButtonPress-v0",
+                        help=f"Task to train. Options: {', '.join(TASKS + ['all'])}")
+    parser.add_argument("--timesteps", type=int, default=500_000,
+                        help="Total training timesteps (default: 500000)")
+    parser.add_argument("--n_envs", type=int, default=8,
+                        help="Number of parallel environments (default: 8)")
+    parser.add_argument("--checkpoint", type=str, default=None,
+                        help="Path to checkpoint to resume from")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed (default: 42)")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "cpu"],
+                        help="Device to use (default: auto)")
     
     args = parser.parse_args()
     
-    # Determine tasks to train
     if args.task.lower() == "all":
         tasks_to_train = TASKS
     elif args.task in TASKS:
         tasks_to_train = [args.task]
     else:
-        print(f"❌ Unknown task: {args.task}")
-        print(f"   Available tasks: {', '.join(TASKS + ['all'])}")
+        print(f"Unknown task: {args.task}")
+        print(f"Available tasks: {', '.join(TASKS + ['all'])}")
         sys.exit(1)
     
-    # Train
-    print(f"\n🎮 Dexterous Manipulation Benchmark - Training")
-    print(f"   Tasks: {', '.join(tasks_to_train)}")
-    print(f"   Total: {len(tasks_to_train)} task(s)\n")
+    print(f"\nDexterous Manipulation Benchmark - Training")
+    print(f"  Tasks: {', '.join(tasks_to_train)}")
+    print(f"  Total: {len(tasks_to_train)} task(s)\n")
     
     for i, task in enumerate(tasks_to_train, 1):
         print(f"\n[{i}/{len(tasks_to_train)}] Training {task}...")
@@ -364,8 +303,8 @@ Examples:
             device=args.device,
         )
     
-    print("\n🎉 All training complete!")
-    print("   View training curves: tensorboard --logdir tb_logs/")
+    print("\nAll training complete!")
+    print("View training curves: tensorboard --logdir tb_logs/")
 
 
 if __name__ == "__main__":

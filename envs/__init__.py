@@ -1,18 +1,4 @@
-"""
-Shadow Hand Dexterous Manipulation Environments
-================================================
-
-Tasks:
-    - ButtonPress-v0: Press a red button
-    - CubePush-v0: Push a cube into a target ring
-    - CubePickup-v0: Grasp and lift a cube to a target height
-
-Usage:
-    import gymnasium as gym
-    import envs
-    
-    env = gym.make("ButtonPress-v0", render_mode="human")
-"""
+"""Shadow Hand dexterous manipulation environments."""
 
 from gymnasium.envs.registration import register
 
